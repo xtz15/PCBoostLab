@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
+import threading
 from pathlib import Path
 
 import customtkinter as ctk
@@ -27,6 +28,9 @@ class PCBoostLabApp(ctk.CTk):
         self.title("PCBoostLab")
         self.geometry("1100x700")
         self.minsize(1000, 620)
+
+        self.diagnostic_refresh_button = None
+        self.diagnostic_load_id = 0
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -69,6 +73,9 @@ class PCBoostLabApp(ctk.CTk):
             button.pack(fill="x", padx=16, pady=6)
 
     def clear_content(self):
+        self.diagnostic_load_id += 1
+        self.diagnostic_refresh_button = None
+
         for widget in self.content.winfo_children():
             widget.destroy()
 
@@ -120,6 +127,42 @@ class PCBoostLabApp(ctk.CTk):
             text=text,
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", padx=28, pady=(4, 8))
+
+    def show_loading_message(self, parent):
+        for widget in parent.winfo_children():
+            widget.destroy()
+
+        loading_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        loading_frame.pack(fill="x", padx=28, pady=(8, 14))
+
+        ctk.CTkLabel(
+            loading_frame,
+            text="Carregando diagnóstico...",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", pady=(0, 6))
+
+        ctk.CTkLabel(
+            loading_frame,
+            text="Isso pode levar alguns segundos.",
+            text_color="#9ca3af",
+            font=ctk.CTkFont(size=14),
+        ).pack(anchor="w")
+
+    def show_diagnostic_error(self, parent, message):
+        for widget in parent.winfo_children():
+            widget.destroy()
+
+        error = ctk.CTkFrame(parent, fg_color="#7f1d1d", corner_radius=8)
+        error.pack(fill="x", padx=28, pady=(8, 14))
+
+        ctk.CTkLabel(
+            error,
+            text=message,
+            text_color="#fee2e2",
+            justify="left",
+            wraplength=760,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=12)
 
     def add_diagnostic_alerts(self, parent, info):
         cpu_usage = info["cpu"]["uso_percentual"]
@@ -187,12 +230,15 @@ class PCBoostLabApp(ctk.CTk):
         self.create_card(cards, "Memória RAM", f"{ram_total} GB\nUso atual: {ram_used}%", 1)
         self.create_card(cards, "Sistema", system_name, 2)
 
-    def render_diagnostics_content(self, parent):
+    def collect_diagnostic_data(self):
+        return {
+            "info": collect_system_info(),
+            "process_data": collect_top_processes(limit=10),
+        }
+
+    def render_diagnostics_content(self, parent, info, process_data):
         for widget in parent.winfo_children():
             widget.destroy()
-
-        info = collect_system_info()
-        process_data = collect_top_processes(limit=10)
 
         self.add_diagnostic_alerts(parent, info)
 
@@ -213,21 +259,68 @@ class PCBoostLabApp(ctk.CTk):
             height=220,
         )
 
+    def start_diagnostic_load(self, parent):
+        self.diagnostic_load_id += 1
+        load_id = self.diagnostic_load_id
+
+        if self.diagnostic_refresh_button:
+            self.diagnostic_refresh_button.configure(state="disabled")
+
+        self.show_loading_message(parent)
+
+        def worker():
+            try:
+                result = self.collect_diagnostic_data()
+            except Exception as exc:
+                logger.exception("Falha ao carregar diagnostico em segundo plano: %s", exc)
+                self.after(0, lambda: self.finish_diagnostic_load(parent, load_id, error=exc))
+                return
+
+            self.after(0, lambda: self.finish_diagnostic_load(parent, load_id, result=result))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def finish_diagnostic_load(self, parent, load_id, result=None, error=None):
+        if load_id != self.diagnostic_load_id:
+            return
+
+        try:
+            if not parent.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if error:
+            self.show_diagnostic_error(
+                parent,
+                "Não foi possível carregar o diagnóstico agora. Tente atualizar novamente.",
+            )
+        else:
+            self.render_diagnostics_content(
+                parent,
+                result["info"],
+                result["process_data"],
+            )
+
+        if self.diagnostic_refresh_button:
+            self.diagnostic_refresh_button.configure(state="normal")
+
     def show_diagnostics(self):
         self.clear_content()
         self.page_header("Diagnóstico do PC", "Leitura inicial de CPU, RAM, sistema e processos")
 
         body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
 
-        ctk.CTkButton(
+        self.diagnostic_refresh_button = ctk.CTkButton(
             self.content,
             text="Atualizar diagnóstico",
             width=190,
-            command=lambda: self.render_diagnostics_content(body),
-        ).pack(anchor="w", padx=28, pady=(0, 12))
+            command=lambda: self.start_diagnostic_load(body),
+        )
+        self.diagnostic_refresh_button.pack(anchor="w", padx=28, pady=(0, 12))
 
         body.pack(fill="both", expand=True, padx=0, pady=(0, 16))
-        self.render_diagnostics_content(body)
+        self.start_diagnostic_load(body)
 
     def optimization_card(self, title, description, button_text):
         card = ctk.CTkFrame(self.content, corner_radius=12)
