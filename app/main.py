@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
 
@@ -8,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.core.logger import get_logger
+from app.diagnostics.processes import collect_top_processes
 from app.diagnostics.system_info import collect_system_info, format_diagnostic_text
 from app.reports.report_builder import generate_diagnostic_report
 
@@ -105,6 +107,38 @@ class PCBoostLabApp(ctk.CTk):
             font=ctk.CTkFont(size=17, weight="bold"),
         ).pack(anchor="w", padx=18, pady=(0, 18))
 
+    def add_readonly_box(self, parent, text, height=160):
+        box = ctk.CTkTextbox(parent, height=height, font=ctk.CTkFont(size=14))
+        box.pack(fill="x", padx=28, pady=(0, 14))
+        box.insert("1.0", text)
+        box.configure(state="disabled")
+        return box
+
+    def section_title(self, parent, text):
+        ctk.CTkLabel(
+            parent,
+            text=text,
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", padx=28, pady=(4, 8))
+
+    def format_process_table(self, processes):
+        if not processes:
+            return "Nenhum processo encontrado."
+
+        lines = [f"{'PID':>7}  {'RAM MB':>9}  {'CPU %':>7}  Nome"]
+        lines.append("-" * 70)
+
+        for process in processes:
+            name = process["nome"][:38]
+            lines.append(
+                f"{process['pid']:>7}  "
+                f"{process['ram_mb']:>9.1f}  "
+                f"{process['cpu_percent']:>7.1f}  "
+                f"{name}"
+            )
+
+        return "\n".join(lines)
+
     def show_dashboard(self):
         self.clear_content()
         self.page_header("Painel", "Resumo geral do computador")
@@ -124,14 +158,30 @@ class PCBoostLabApp(ctk.CTk):
 
     def show_diagnostics(self):
         self.clear_content()
-        self.page_header("Diagnóstico do PC", "Leitura inicial de CPU, RAM e sistema")
+        self.page_header("Diagnóstico do PC", "Leitura inicial de CPU, RAM, sistema e processos")
 
-        diagnostic_text = format_diagnostic_text(collect_system_info())
+        body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=0, pady=(0, 16))
 
-        box = ctk.CTkTextbox(self.content, height=300, font=ctk.CTkFont(size=15))
-        box.pack(fill="x", padx=28, pady=10)
-        box.insert("1.0", diagnostic_text)
-        box.configure(state="disabled")
+        info = collect_system_info()
+        process_data = collect_top_processes(limit=10)
+
+        self.section_title(body, "Resumo atual")
+        self.add_readonly_box(body, format_diagnostic_text(info), height=190)
+
+        self.section_title(body, "10 processos que mais usam RAM")
+        self.add_readonly_box(
+            body,
+            self.format_process_table(process_data["por_ram"]),
+            height=220,
+        )
+
+        self.section_title(body, "10 processos que mais usam CPU")
+        self.add_readonly_box(
+            body,
+            self.format_process_table(process_data["por_cpu"]),
+            height=220,
+        )
 
     def optimization_card(self, title, description, button_text):
         card = ctk.CTkFrame(self.content, corner_radius=12)
