@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.core.logger import get_logger
+from app.diagnostics.disks import collect_disks_info
 from app.diagnostics.processes import collect_top_processes
 from app.diagnostics.system_info import collect_system_info, format_diagnostic_text
 from app.reports.report_builder import generate_diagnostic_report
@@ -198,6 +199,35 @@ class PCBoostLabApp(ctk.CTk):
             font=ctk.CTkFont(size=14, weight="bold"),
         ).pack(anchor="w", padx=16, pady=12)
 
+    def add_disk_alerts(self, parent, disks):
+        alerts = []
+
+        for disk in disks:
+            if disk["percentual_usado"] > 85:
+                alerts.append(
+                    f"{disk['unidade']} está com {disk['percentual_usado']}% usado."
+                )
+
+            if disk["livre_gb"] < 20:
+                alerts.append(
+                    f"{disk['unidade']} tem apenas {disk['livre_gb']} GB livres."
+                )
+
+        if not alerts:
+            return
+
+        alert = ctk.CTkFrame(parent, fg_color="#7f1d1d", corner_radius=8)
+        alert.pack(fill="x", padx=28, pady=(0, 14))
+
+        ctk.CTkLabel(
+            alert,
+            text="\n".join(alerts),
+            text_color="#fee2e2",
+            justify="left",
+            wraplength=760,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=12)
+
     def format_process_table(self, processes):
         if not processes:
             return "Nenhum processo encontrado."
@@ -212,6 +242,27 @@ class PCBoostLabApp(ctk.CTk):
                 f"{process['ram_mb']:>9.1f}  "
                 f"{process['cpu_percent']:>7.1f}  "
                 f"{name}"
+            )
+
+        return "\n".join(lines)
+
+    def format_disks_table(self, disks):
+        if not disks:
+            return "Nenhum disco encontrado ou acessível."
+
+        lines = [
+            f"{'Unidade':<12} {'FS':<10} {'Total GB':>10} {'Usado GB':>10} {'Livre GB':>10} {'Usado %':>8}"
+        ]
+        lines.append("-" * 78)
+
+        for disk in disks:
+            lines.append(
+                f"{disk['unidade'][:12]:<12} "
+                f"{disk['sistema_arquivos'][:10]:<10} "
+                f"{disk['total_gb']:>10.1f} "
+                f"{disk['usado_gb']:>10.1f} "
+                f"{disk['livre_gb']:>10.1f} "
+                f"{disk['percentual_usado']:>8.1f}"
             )
 
         return "\n".join(lines)
@@ -304,10 +355,11 @@ class PCBoostLabApp(ctk.CTk):
     def collect_diagnostic_data(self):
         return {
             "info": collect_system_info(),
+            "disks": collect_disks_info(),
             "process_data": collect_top_processes(limit=10),
         }
 
-    def render_diagnostics_content(self, parent, info, process_data):
+    def render_diagnostics_content(self, parent, info, process_data, disks):
         for widget in parent.winfo_children():
             widget.destroy()
 
@@ -315,6 +367,14 @@ class PCBoostLabApp(ctk.CTk):
 
         self.section_title(parent, "Resumo atual")
         self.add_readonly_box(parent, format_diagnostic_text(info), height=190)
+
+        self.section_title(parent, "Discos")
+        self.add_disk_alerts(parent, disks)
+        self.add_readonly_box(
+            parent,
+            self.format_disks_table(disks),
+            height=160,
+        )
 
         self.section_title(parent, "10 processos que mais usam RAM")
         self.add_readonly_box(
@@ -376,6 +436,7 @@ class PCBoostLabApp(ctk.CTk):
                 parent,
                 result["info"],
                 result["process_data"],
+                result["disks"],
             )
 
         if self.diagnostic_refresh_button:
