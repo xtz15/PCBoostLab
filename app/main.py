@@ -1,11 +1,21 @@
-﻿import platform
-import psutil
-import cpuinfo
+import sys
+from pathlib import Path
+
 import customtkinter as ctk
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from app.core.logger import get_logger
+from app.diagnostics.system_info import collect_system_info, format_diagnostic_text
+from app.reports.report_builder import generate_diagnostic_report
 
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+logger = get_logger(__name__)
 
 
 class PCBoostLabApp(ctk.CTk):
@@ -32,7 +42,7 @@ class PCBoostLabApp(ctk.CTk):
         title = ctk.CTkLabel(
             self.sidebar,
             text="PCBoostLab",
-            font=ctk.CTkFont(size=25, weight="bold")
+            font=ctk.CTkFont(size=25, weight="bold"),
         )
         title.pack(pady=(30, 24), padx=20)
 
@@ -43,6 +53,7 @@ class PCBoostLabApp(ctk.CTk):
             ("Otimizações avançadas", self.show_advanced_optimizations),
             ("Limpeza", self.show_cleaning),
             ("Restauração", self.show_restore),
+            ("Relatórios", self.show_reports),
         ]
 
         for text, command in buttons:
@@ -51,7 +62,7 @@ class PCBoostLabApp(ctk.CTk):
                 text=text,
                 height=42,
                 anchor="w",
-                command=command
+                command=command,
             )
             button.pack(fill="x", padx=16, pady=6)
 
@@ -63,14 +74,14 @@ class PCBoostLabApp(ctk.CTk):
         ctk.CTkLabel(
             self.content,
             text=title,
-            font=ctk.CTkFont(size=28, weight="bold")
+            font=ctk.CTkFont(size=28, weight="bold"),
         ).pack(anchor="w", padx=28, pady=(26, 4))
 
         ctk.CTkLabel(
             self.content,
             text=subtitle,
             text_color="#9ca3af",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=14),
         ).pack(anchor="w", padx=28, pady=(0, 24))
 
     def create_card(self, parent, title, value, column):
@@ -83,7 +94,7 @@ class PCBoostLabApp(ctk.CTk):
             card,
             text=title,
             text_color="#9ca3af",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=14),
         ).pack(anchor="w", padx=18, pady=(18, 6))
 
         ctk.CTkLabel(
@@ -91,17 +102,18 @@ class PCBoostLabApp(ctk.CTk):
             text=value,
             wraplength=260,
             justify="left",
-            font=ctk.CTkFont(size=17, weight="bold")
+            font=ctk.CTkFont(size=17, weight="bold"),
         ).pack(anchor="w", padx=18, pady=(0, 18))
 
     def show_dashboard(self):
         self.clear_content()
         self.page_header("Painel", "Resumo geral do computador")
 
-        cpu_name = cpuinfo.get_cpu_info().get("brand_raw", "Processador não identificado")
-        ram_total = round(psutil.virtual_memory().total / (1024 ** 3), 1)
-        ram_used = psutil.virtual_memory().percent
-        system_name = f"{platform.system()} {platform.release()}"
+        info = collect_system_info()
+        cpu_name = info["cpu"]["nome"]
+        ram_total = round(info["ram"]["total_gb"], 1)
+        ram_used = info["ram"]["uso_percentual"]
+        system_name = info["sistema"]["descricao"]
 
         cards = ctk.CTkFrame(self.content, fg_color="transparent")
         cards.pack(fill="x", padx=20, pady=8)
@@ -114,19 +126,7 @@ class PCBoostLabApp(ctk.CTk):
         self.clear_content()
         self.page_header("Diagnóstico do PC", "Leitura inicial de CPU, RAM e sistema")
 
-        ram = psutil.virtual_memory()
-
-        diagnostic_text = (
-            f"CPU: {cpuinfo.get_cpu_info().get('brand_raw', 'Não identificado')}\n"
-            f"Núcleos físicos: {psutil.cpu_count(logical=False)}\n"
-            f"Threads: {psutil.cpu_count(logical=True)}\n"
-            f"Uso de CPU atual: {psutil.cpu_percent(interval=1)}%\n\n"
-            f"RAM total: {round(ram.total / (1024 ** 3), 2)} GB\n"
-            f"RAM em uso: {ram.percent}%\n"
-            f"RAM disponível: {round(ram.available / (1024 ** 3), 2)} GB\n\n"
-            f"Sistema: {platform.system()} {platform.release()}\n"
-            f"Versão: {platform.version()}"
-        )
+        diagnostic_text = format_diagnostic_text(collect_system_info())
 
         box = ctk.CTkTextbox(self.content, height=300, font=ctk.CTkFont(size=15))
         box.pack(fill="x", padx=28, pady=10)
@@ -140,7 +140,7 @@ class PCBoostLabApp(ctk.CTk):
         ctk.CTkLabel(
             card,
             text=title,
-            font=ctk.CTkFont(size=18, weight="bold")
+            font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", padx=18, pady=(16, 4))
 
         ctk.CTkLabel(
@@ -148,13 +148,13 @@ class PCBoostLabApp(ctk.CTk):
             text=description,
             text_color="#9ca3af",
             wraplength=760,
-            justify="left"
+            justify="left",
         ).pack(anchor="w", padx=18, pady=(0, 12))
 
         ctk.CTkButton(
             card,
             text=button_text,
-            width=130
+            width=130,
         ).pack(anchor="e", padx=18, pady=(0, 16))
 
     def show_safe_optimizations(self):
@@ -164,13 +164,13 @@ class PCBoostLabApp(ctk.CTk):
         self.optimization_card(
             "Plano de energia de alto desempenho",
             "Mantém o processador mais responsivo. Pode aumentar consumo e temperatura.",
-            "Aplicar"
+            "Aplicar",
         )
 
         self.optimization_card(
             "Desativar apps em segundo plano",
             "Reduz processos desnecessários. Pode impedir notificações de alguns aplicativos.",
-            "Aplicar"
+            "Aplicar",
         )
 
     def show_advanced_optimizations(self):
@@ -180,13 +180,13 @@ class PCBoostLabApp(ctk.CTk):
         self.optimization_card(
             "Desativar Inicialização Rápida",
             "Pode evitar problemas de driver, dual boot e hardware. O boot pode ficar um pouco mais lento.",
-            "Aplicar"
+            "Aplicar",
         )
 
         self.optimization_card(
             "Ajustes de prioridade Win32",
             "Altera prioridade de resposta entre programas e serviços. Deve ser testado caso a caso.",
-            "Aplicar"
+            "Aplicar",
         )
 
     def show_cleaning(self):
@@ -196,13 +196,13 @@ class PCBoostLabApp(ctk.CTk):
         self.optimization_card(
             "Limpar arquivos temporários",
             "Remove arquivos temporários do usuário e do sistema. Seguro na maioria dos casos.",
-            "Limpar"
+            "Limpar",
         )
 
         self.optimization_card(
             "Limpar cache de miniaturas",
             "O Windows recriará as miniaturas depois. Pode causar lentidão temporária ao abrir pastas com imagens.",
-            "Limpar"
+            "Limpar",
         )
 
     def show_restore(self):
@@ -212,8 +212,52 @@ class PCBoostLabApp(ctk.CTk):
         self.optimization_card(
             "Criar ponto de restauração",
             "Permite voltar configurações do sistema caso algum ajuste cause instabilidade.",
-            "Criar"
+            "Criar",
         )
+
+    def show_reports(self):
+        self.clear_content()
+        self.page_header("Relatórios", "Geração de relatório simples de diagnóstico")
+
+        ctk.CTkLabel(
+            self.content,
+            text=(
+                "Gera um arquivo .txt com CPU, RAM, sistema, data/hora "
+                "e uso atual de CPU/RAM. Esta função apenas lê informações "
+                "do computador e não altera configurações do Windows."
+            ),
+            text_color="#9ca3af",
+            wraplength=760,
+            justify="left",
+        ).pack(anchor="w", padx=28, pady=(0, 16))
+
+        result_label = ctk.CTkLabel(
+            self.content,
+            text="Nenhum relatório gerado nesta sessão.",
+            text_color="#9ca3af",
+            wraplength=760,
+            justify="left",
+        )
+        result_label.pack(anchor="w", padx=28, pady=(0, 16))
+
+        def on_generate_report():
+            try:
+                report_path = generate_diagnostic_report()
+                result_label.configure(
+                    text=f"Relatório gerado com sucesso:\n{report_path}"
+                )
+            except Exception as exc:
+                logger.exception("Falha ao gerar relatorio de diagnostico: %s", exc)
+                result_label.configure(
+                    text="Não foi possível gerar o relatório. Consulte o log em data/logs/pcboostlab.log."
+                )
+
+        ctk.CTkButton(
+            self.content,
+            text="Gerar relatório",
+            width=170,
+            command=on_generate_report,
+        ).pack(anchor="w", padx=28, pady=(0, 16))
 
 
 if __name__ == "__main__":

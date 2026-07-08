@@ -5,3 +5,10 @@ __pycache__/
 dist/
 build/
 *.spec
+
+data/logs/*.log
+data/reports/*.txt
+data/backups/*
+!data/logs/.gitkeep
+!data/reports/.gitkeep
+!data/backups/.gitkeep
