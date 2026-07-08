@@ -31,6 +31,8 @@ class PCBoostLabApp(ctk.CTk):
 
         self.diagnostic_refresh_button = None
         self.diagnostic_load_id = 0
+        self.dashboard_load_id = 0
+        self.latest_system_info = None
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -74,6 +76,7 @@ class PCBoostLabApp(ctk.CTk):
 
     def clear_content(self):
         self.diagnostic_load_id += 1
+        self.dashboard_load_id += 1
         self.diagnostic_refresh_button = None
 
         for widget in self.content.winfo_children():
@@ -109,7 +112,7 @@ class PCBoostLabApp(ctk.CTk):
         ctk.CTkLabel(
             card,
             text=value,
-            wraplength=260,
+            wraplength=220,
             justify="left",
             font=ctk.CTkFont(size=17, weight="bold"),
         ).pack(anchor="w", padx=18, pady=(0, 18))
@@ -128,7 +131,7 @@ class PCBoostLabApp(ctk.CTk):
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", padx=28, pady=(4, 8))
 
-    def show_loading_message(self, parent):
+    def show_loading_message(self, parent, title, subtitle):
         for widget in parent.winfo_children():
             widget.destroy()
 
@@ -137,18 +140,18 @@ class PCBoostLabApp(ctk.CTk):
 
         ctk.CTkLabel(
             loading_frame,
-            text="Carregando diagnóstico...",
+            text=title,
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", pady=(0, 6))
 
         ctk.CTkLabel(
             loading_frame,
-            text="Isso pode levar alguns segundos.",
+            text=subtitle,
             text_color="#9ca3af",
             font=ctk.CTkFont(size=14),
         ).pack(anchor="w")
 
-    def show_diagnostic_error(self, parent, message):
+    def show_error_message(self, parent, message):
         for widget in parent.winfo_children():
             widget.destroy()
 
@@ -213,22 +216,90 @@ class PCBoostLabApp(ctk.CTk):
 
         return "\n".join(lines)
 
-    def show_dashboard(self):
-        self.clear_content()
-        self.page_header("Painel", "Resumo geral do computador")
+    def render_dashboard_content(self, parent, info):
+        for widget in parent.winfo_children():
+            widget.destroy()
 
-        info = collect_system_info()
         cpu_name = info["cpu"]["nome"]
         ram_total = round(info["ram"]["total_gb"], 1)
         ram_used = info["ram"]["uso_percentual"]
         system_name = info["sistema"]["descricao"]
 
-        cards = ctk.CTkFrame(self.content, fg_color="transparent")
+        cards = ctk.CTkFrame(parent, fg_color="transparent")
         cards.pack(fill="x", padx=20, pady=8)
 
-        self.create_card(cards, "Processador", cpu_name, 0)
-        self.create_card(cards, "Memória RAM", f"{ram_total} GB\nUso atual: {ram_used}%", 1)
-        self.create_card(cards, "Sistema", system_name, 2)
+        self.create_card(cards, "CPU", cpu_name, 0)
+        self.create_card(cards, "RAM total", f"{ram_total} GB", 1)
+        self.create_card(cards, "RAM em uso", f"{ram_used}%", 2)
+        self.create_card(cards, "Sistema operacional", system_name, 3)
+
+    def start_dashboard_load(self, parent):
+        self.dashboard_load_id += 1
+        load_id = self.dashboard_load_id
+
+        self.show_loading_message(
+            parent,
+            "Carregando painel...",
+            "Coletando resumo do computador.",
+        )
+
+        if self.latest_system_info:
+            self.after(
+                50,
+                lambda: self.render_cached_dashboard(parent, load_id, self.latest_system_info),
+            )
+
+        def worker():
+            try:
+                info = collect_system_info()
+            except Exception as exc:
+                logger.exception("Falha ao carregar painel em segundo plano: %s", exc)
+                self.after(0, lambda: self.finish_dashboard_load(parent, load_id, error=exc))
+                return
+
+            self.after(0, lambda: self.finish_dashboard_load(parent, load_id, info=info))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def render_cached_dashboard(self, parent, load_id, info):
+        if load_id != self.dashboard_load_id:
+            return
+
+        try:
+            if not parent.winfo_exists():
+                return
+        except Exception:
+            return
+
+        self.render_dashboard_content(parent, info)
+
+    def finish_dashboard_load(self, parent, load_id, info=None, error=None):
+        if load_id != self.dashboard_load_id:
+            return
+
+        try:
+            if not parent.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if error:
+            self.show_error_message(
+                parent,
+                "Não foi possível carregar o painel agora. Tente abrir o Painel novamente.",
+            )
+            return
+
+        self.latest_system_info = info
+        self.render_dashboard_content(parent, info)
+
+    def show_dashboard(self):
+        self.clear_content()
+        self.page_header("Painel", "Resumo geral do computador")
+
+        body = ctk.CTkFrame(self.content, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=0, pady=(0, 16))
+        self.start_dashboard_load(body)
 
     def collect_diagnostic_data(self):
         return {
@@ -266,7 +337,11 @@ class PCBoostLabApp(ctk.CTk):
         if self.diagnostic_refresh_button:
             self.diagnostic_refresh_button.configure(state="disabled")
 
-        self.show_loading_message(parent)
+        self.show_loading_message(
+            parent,
+            "Carregando diagnóstico...",
+            "Isso pode levar alguns segundos.",
+        )
 
         def worker():
             try:
@@ -291,11 +366,12 @@ class PCBoostLabApp(ctk.CTk):
             return
 
         if error:
-            self.show_diagnostic_error(
+            self.show_error_message(
                 parent,
                 "Não foi possível carregar o diagnóstico agora. Tente atualizar novamente.",
             )
         else:
+            self.latest_system_info = result["info"]
             self.render_diagnostics_content(
                 parent,
                 result["info"],
