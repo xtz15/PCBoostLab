@@ -84,7 +84,7 @@ class PCBoostLabApp(ctk.CTk):
             text=subtitle,
             text_color="#9ca3af",
             font=ctk.CTkFont(size=14),
-        ).pack(anchor="w", padx=28, pady=(0, 24))
+        ).pack(anchor="w", padx=28, pady=(0, 18))
 
     def create_card(self, parent, title, value, column):
         parent.grid_columnconfigure(column, weight=1)
@@ -121,6 +121,37 @@ class PCBoostLabApp(ctk.CTk):
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", padx=28, pady=(4, 8))
 
+    def add_diagnostic_alerts(self, parent, info):
+        cpu_usage = info["cpu"]["uso_percentual"]
+        ram_usage = info["ram"]["uso_percentual"]
+        alerts = []
+
+        if ram_usage > 80:
+            alerts.append(f"RAM em uso acima de 80%: {ram_usage}%.")
+
+        if cpu_usage > 80:
+            alerts.append(f"CPU em uso acima de 80%: {cpu_usage}%.")
+
+        if not alerts:
+            alerts.append("CPU e RAM estão abaixo do limite de alerta de 80%.")
+            color = "#14532d"
+            text_color = "#dcfce7"
+        else:
+            color = "#7f1d1d"
+            text_color = "#fee2e2"
+
+        alert = ctk.CTkFrame(parent, fg_color=color, corner_radius=8)
+        alert.pack(fill="x", padx=28, pady=(0, 14))
+
+        ctk.CTkLabel(
+            alert,
+            text="\n".join(alerts),
+            text_color=text_color,
+            justify="left",
+            wraplength=760,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=12)
+
     def format_process_table(self, processes):
         if not processes:
             return "Nenhum processo encontrado."
@@ -156,32 +187,47 @@ class PCBoostLabApp(ctk.CTk):
         self.create_card(cards, "Memória RAM", f"{ram_total} GB\nUso atual: {ram_used}%", 1)
         self.create_card(cards, "Sistema", system_name, 2)
 
+    def render_diagnostics_content(self, parent):
+        for widget in parent.winfo_children():
+            widget.destroy()
+
+        info = collect_system_info()
+        process_data = collect_top_processes(limit=10)
+
+        self.add_diagnostic_alerts(parent, info)
+
+        self.section_title(parent, "Resumo atual")
+        self.add_readonly_box(parent, format_diagnostic_text(info), height=190)
+
+        self.section_title(parent, "10 processos que mais usam RAM")
+        self.add_readonly_box(
+            parent,
+            self.format_process_table(process_data["por_ram"]),
+            height=220,
+        )
+
+        self.section_title(parent, "10 processos que mais usam CPU")
+        self.add_readonly_box(
+            parent,
+            self.format_process_table(process_data["por_cpu"]),
+            height=220,
+        )
+
     def show_diagnostics(self):
         self.clear_content()
         self.page_header("Diagnóstico do PC", "Leitura inicial de CPU, RAM, sistema e processos")
 
         body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
+
+        ctk.CTkButton(
+            self.content,
+            text="Atualizar diagnóstico",
+            width=190,
+            command=lambda: self.render_diagnostics_content(body),
+        ).pack(anchor="w", padx=28, pady=(0, 12))
+
         body.pack(fill="both", expand=True, padx=0, pady=(0, 16))
-
-        info = collect_system_info()
-        process_data = collect_top_processes(limit=10)
-
-        self.section_title(body, "Resumo atual")
-        self.add_readonly_box(body, format_diagnostic_text(info), height=190)
-
-        self.section_title(body, "10 processos que mais usam RAM")
-        self.add_readonly_box(
-            body,
-            self.format_process_table(process_data["por_ram"]),
-            height=220,
-        )
-
-        self.section_title(body, "10 processos que mais usam CPU")
-        self.add_readonly_box(
-            body,
-            self.format_process_table(process_data["por_cpu"]),
-            height=220,
-        )
+        self.render_diagnostics_content(body)
 
     def optimization_card(self, title, description, button_text):
         card = ctk.CTkFrame(self.content, corner_radius=12)
