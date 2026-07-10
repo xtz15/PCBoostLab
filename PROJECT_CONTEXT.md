@@ -10,6 +10,8 @@ O projeto não deve aplicar overclock automático.
 
 Toda alteração no computador deve ser explicada, controlada e reversível quando possível.
 
+---
+
 ## Público-alvo
 
 Usuários Windows que desejam:
@@ -21,6 +23,8 @@ Usuários Windows que desejam:
 - gerar relatórios.
 
 O usuário não precisa ter conhecimento técnico avançado.
+
+---
 
 ## Tecnologias
 
@@ -34,113 +38,140 @@ O usuário não precisa ter conhecimento técnico avançado.
 - Git
 - GitHub
 
+---
+
 ## Funcionalidades implementadas
 
 ### Painel
 
-- resumo do computador;
-- carregamento em segundo plano;
-- interface responsiva.
+- Resumo do computador.
+- Carregamento em segundo plano.
+- Interface responsiva.
 
 ### Diagnóstico
 
-- CPU;
-- RAM;
-- sistema operacional;
-- processos;
-- discos.
+- CPU.
+- RAM.
+- Sistema operacional.
+- Processos.
+- Discos.
 
 ### Processos
 
-- top 10 por uso de RAM;
-- top 10 por uso de CPU;
-- somente leitura;
-- não encerra processos;
-- ignora PID 0 e processos Idle.
+- Top 10 por uso de RAM.
+- Top 10 por uso de CPU.
+- Somente leitura.
+- Não encerra processos.
+- Ignora PID 0 e processos Idle.
 
 ### Discos
 
-- unidade;
-- sistema de arquivos;
-- espaço total;
-- espaço usado;
-- espaço livre;
-- percentual de uso.
+- Unidade.
+- Sistema de arquivos.
+- Espaço total.
+- Espaço usado.
+- Espaço livre.
+- Percentual de uso.
 
 ### Relatórios
 
-- geração de relatório em TXT.
+- Geração de relatório TXT.
 
 ### Logs
 
-- erros são registrados em arquivo;
-- o usuário não deve receber traceback na interface.
+- Erros registrados em arquivo.
+- O usuário nunca deve receber traceback na interface.
+
+---
 
 ## Regras de segurança
 
-- não desativar Defender;
-- não desativar firewall;
-- não alterar serviços críticos automaticamente;
-- não aplicar ajustes de Registro sem explicação e reversão;
-- não executar ações administrativas sem confirmação;
-- não apagar arquivos sem prévia;
-- não prometer ganho de FPS sem medição;
-- toda ação avançada deve informar benefício, risco e como desfazer.
+- Nunca desativar Defender automaticamente.
+- Nunca desativar Firewall automaticamente.
+- Nunca alterar serviços críticos automaticamente.
+- Nunca alterar Registro do Windows sem explicação e confirmação.
+- Nunca apagar arquivos automaticamente sem mostrar o que será removido.
+- Nunca prometer ganho de desempenho sem evidências.
+- Toda alteração deve informar:
+  - benefício;
+  - risco;
+  - como desfazer.
+
+---
 
 ## Regras de interface
 
-O aplicativo deve parecer fluido.
+O aplicativo deve sempre parecer fluido.
 
-Se uma operação puder demorar:
+Se alguma operação puder demorar:
 
-- mostrar loading;
-- executar em segundo plano;
-- manter a janela responsiva;
-- mostrar mensagem amigável;
-- impedir cliques duplicados durante a execução.
+- Mostrar loading.
+- Executar em segundo plano.
+- Manter a interface responsiva.
+- Mostrar mensagem amigável.
+- Evitar travamentos.
+- Evitar cliques duplicados.
 
-## Próxima etapa
+---
 
-Desenvolver o módulo de Limpeza Segura.
+## Próxima funcionalidade
 
-Requisitos:
+Desenvolver o módulo **Limpeza Segura**.
 
-- mostrar frequência recomendada;
-- avisar que limpeza diária não é recomendada;
-- incluir análise de temporários;
-- incluir Prefetch com aviso de uso ocasional;
-- incluir limpeza de miniaturas;
-- abrir a Limpeza de Disco do Windows;
-- mostrar prévia antes de apagar;
-- mostrar espaço estimado;
-- registrar resultado em log;
-- gerar relatório.
+Objetivos:
+
+- Informar frequência recomendada.
+- Avisar que limpeza diária não é recomendada.
+- Analisar arquivos temporários.
+- Limpar Prefetch com aviso.
+- Limpar cache de miniaturas.
+- Integrar a Limpeza de Disco do Windows.
+- Exibir prévia antes da limpeza.
+- Mostrar espaço estimado.
+- Registrar resultado em log.
+- Gerar relatório.
+
+---
+
+## Documentação oficial
+
+Antes de implementar qualquer funcionalidade, consultar:
+
+- `PROJECT_CONTEXT.md`
+- `docs/roadmap.md`
+- `docs/ideias.md`
+- `docs/DESIGN.md`
+- `docs/CHANGELOG.md`
+
+Em caso de conflito:
+
+1. PROJECT_CONTEXT.md
+2. DESIGN.md
+3. roadmap.md
+4. CHANGELOG.md
+
+O arquivo `ideias.md` contém apenas ideias futuras e não representa funcionalidades aprovadas.
+
+---
 
 ## Fluxo obrigatório após cada alteração
 
-Sempre seguir esta ordem:
+Sempre seguir esta sequência:
 
 1. Testar o aplicativo.
-2. Rodar:
+2. Atualizar a documentação necessária.
+3. Executar:
 
 ```powershell
 git status
+git add .
+git commit -m "descrição da alteração"
+git push
+git status
+```
 
-# Histórico de versões
+Somente iniciar uma nova funcionalidade quando o Git retornar:
 
-## v0.1
-
-- Estrutura modular
-- Diagnóstico de CPU
-- Diagnóstico de RAM
-- Diagnóstico do Sistema
-- Diagnóstico de Processos
-- Diagnóstico de Discos
-- Relatórios TXT
-- Interface assíncrona
-- Loading nas páginas
-- Integração com GitHub
-
-## Próxima versão
-
-- Limpeza Segura
+```text
+nothing to commit, working tree clean
+```

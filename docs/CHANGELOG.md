@@ -1,25 +1,68 @@
-# CHANGELOG
+# PCBoostLab - Changelog
 
-## v0.1
+Todas as alterações relevantes do projeto devem ser registradas neste arquivo.
 
-### Adicionado
-
-- Estrutura modular
-- Interface principal
-- Diagnóstico de CPU
-- Diagnóstico de RAM
-- Diagnóstico do Sistema
-- Diagnóstico de Processos
-- Diagnóstico de Discos
-- Relatórios TXT
-- Interface assíncrona
-- Loading nas páginas
-- Integração com GitHub
+O formato segue uma adaptação simples do padrão Keep a Changelog.
 
 ---
 
-## Próxima versão
+## [Não lançado]
 
-v0.2
+### Em desenvolvimento
 
-- Limpeza Segura    
+- Módulo de Limpeza Segura.
+
+---
+
+## [0.1.0]
+
+### Adicionado
+
+- Estrutura modular inicial.
+- Interface principal com CustomTkinter.
+- Painel com resumo do computador.
+- Diagnóstico de CPU.
+- Diagnóstico de memória RAM.
+- Diagnóstico do sistema operacional.
+- Diagnóstico de processos por uso de CPU.
+- Diagnóstico de processos por uso de RAM.
+- Diagnóstico de discos e partições.
+- Alertas visuais para uso elevado de CPU, RAM e armazenamento.
+- Geração de relatórios em TXT.
+- Sistema de logs.
+- Carregamento em segundo plano.
+- Indicadores de loading.
+- Tratamento de erros sem exibir traceback ao usuário.
+- Integração com Git.
+- Integração com GitHub.
+- Documentação inicial do projeto.
+
+### Corrigido
+
+- Processos Idle removidos da lista de maior consumo.
+- Valores irreais de uso de CPU corrigidos.
+- Travamento da interface ao abrir o Diagnóstico.
+- Travamento da interface ao abrir o Painel.
+
+### Segurança
+
+- Diagnósticos implementados apenas em modo de leitura.
+- Nenhum processo é encerrado automaticamente.
+- Nenhuma configuração do Windows é alterada.
+- Nenhuma ação administrativa é executada automaticamente.
+
+---
+
+## Convenções
+
+Usar as categorias abaixo quando aplicável:
+
+- `Adicionado`
+- `Alterado`
+- `Corrigido`
+- `Removido`
+- `Segurança`
+
+Novas funcionalidades devem ser registradas inicialmente em `[Não lançado]`.
+
+Quando uma versão for concluída, o conteúdo correspondente deve ser movido para uma nova seção numerada.
