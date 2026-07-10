@@ -125,3 +125,22 @@ Sempre seguir esta ordem:
 
 ```powershell
 git status
+
+# Histórico de versões
+
+## v0.1
+
+- Estrutura modular
+- Diagnóstico de CPU
+- Diagnóstico de RAM
+- Diagnóstico do Sistema
+- Diagnóstico de Processos
+- Diagnóstico de Discos
+- Relatórios TXT
+- Interface assíncrona
+- Loading nas páginas
+- Integração com GitHub
+
+## Próxima versão
+
+- Limpeza Segura
