@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
+import subprocess
 import threading
 from pathlib import Path
 
@@ -10,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.core.logger import get_logger
+from app.cleaning.scan import scan_cleaning_preview
 from app.diagnostics.disks import collect_disks_info
 from app.diagnostics.processes import collect_top_processes
 from app.diagnostics.system_info import collect_system_info, format_diagnostic_text
@@ -33,6 +35,8 @@ class PCBoostLabApp(ctk.CTk):
         self.diagnostic_refresh_button = None
         self.diagnostic_load_id = 0
         self.dashboard_load_id = 0
+        self.cleaning_load_id = 0
+        self.cleaning_analyze_button = None
         self.latest_system_info = None
 
         self.grid_columnconfigure(1, weight=1)
@@ -78,7 +82,9 @@ class PCBoostLabApp(ctk.CTk):
     def clear_content(self):
         self.diagnostic_load_id += 1
         self.dashboard_load_id += 1
+        self.cleaning_load_id += 1
         self.diagnostic_refresh_button = None
+        self.cleaning_analyze_button = None
 
         for widget in self.content.winfo_children():
             widget.destroy()
@@ -515,7 +521,7 @@ class PCBoostLabApp(ctk.CTk):
             "Aplicar",
         )
 
-    def show_cleaning(self):
+    def legacy_cleaning_placeholder(self):
         self.clear_content()
         self.page_header("Limpeza", "Remoção de arquivos temporários e caches")
 
@@ -529,6 +535,202 @@ class PCBoostLabApp(ctk.CTk):
             "Limpar cache de miniaturas",
             "O Windows recriará as miniaturas depois. Pode causar lentidão temporária ao abrir pastas com imagens.",
             "Limpar",
+        )
+
+    def format_size_mb(self, value_mb):
+        if value_mb >= 1024:
+            return f"{value_mb / 1024:.2f} GB"
+
+        return f"{value_mb:.1f} MB"
+
+    def add_info_panel(self, parent, text, color="#1f2937", text_color="#e5e7eb"):
+        panel = ctk.CTkFrame(parent, fg_color=color, corner_radius=8)
+        panel.pack(fill="x", padx=28, pady=(0, 12))
+
+        ctk.CTkLabel(
+            panel,
+            text=text,
+            text_color=text_color,
+            justify="left",
+            wraplength=760,
+            font=ctk.CTkFont(size=14),
+        ).pack(anchor="w", padx=16, pady=12)
+
+    def render_cleaning_categories(self, parent, categories):
+        for widget in parent.winfo_children():
+            widget.destroy()
+
+        if not categories:
+            self.add_info_panel(
+                parent,
+                "Nenhuma categoria disponível para análise no momento.",
+                color="#7f1d1d",
+                text_color="#fee2e2",
+            )
+            return
+
+        for category in categories:
+            card = ctk.CTkFrame(parent, corner_radius=8)
+            card.pack(fill="x", padx=28, pady=(0, 10))
+
+            ctk.CTkLabel(
+                card,
+                text=category["nome"],
+                font=ctk.CTkFont(size=17, weight="bold"),
+            ).pack(anchor="w", padx=16, pady=(14, 4))
+
+            details = (
+                f"Tamanho estimado: {self.format_size_mb(category['tamanho_mb'])}\n"
+                f"Status: {category['status']}\n"
+                f"Caminho analisado: {category['caminho']}"
+            )
+
+            ctk.CTkLabel(
+                card,
+                text=details,
+                text_color="#9ca3af",
+                justify="left",
+                wraplength=760,
+            ).pack(anchor="w", padx=16, pady=(0, 14))
+
+    def start_cleaning_scan(self, parent):
+        self.cleaning_load_id += 1
+        load_id = self.cleaning_load_id
+
+        if self.cleaning_analyze_button:
+            self.cleaning_analyze_button.configure(state="disabled")
+
+        self.show_loading_message(
+            parent,
+            "Analisando arquivos temporários...",
+            "Isso pode levar alguns segundos.",
+        )
+
+        def worker():
+            try:
+                categories = scan_cleaning_preview()
+            except Exception as exc:
+                logger.exception("Falha ao analisar limpeza em segundo plano: %s", exc)
+                self.after(0, lambda: self.finish_cleaning_scan(parent, load_id, error=exc))
+                return
+
+            self.after(
+                0,
+                lambda: self.finish_cleaning_scan(parent, load_id, categories=categories),
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def finish_cleaning_scan(self, parent, load_id, categories=None, error=None):
+        if load_id != self.cleaning_load_id:
+            return
+
+        try:
+            if not parent.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if error:
+            self.show_error_message(
+                parent,
+                "Não foi possível analisar os arquivos temporários agora. Tente novamente.",
+            )
+        else:
+            self.render_cleaning_categories(parent, categories)
+
+        if self.cleaning_analyze_button:
+            self.cleaning_analyze_button.configure(state="normal")
+
+    def open_windows_disk_cleanup(self, result_label):
+        try:
+            subprocess.Popen(["cleanmgr.exe"])
+            result_label.configure(
+                text="Limpeza de Disco do Windows aberta. Nenhuma limpeza foi iniciada pelo PCBoostLab."
+            )
+        except Exception as exc:
+            logger.exception("Falha ao abrir cleanmgr.exe: %s", exc)
+            result_label.configure(
+                text="Não foi possível abrir a Limpeza de Disco do Windows."
+            )
+
+    def show_cleaning(self):
+        self.clear_content()
+        self.page_header("Limpeza", "Prévia segura de arquivos temporários")
+
+        body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
+
+        self.add_info_panel(
+            self.content,
+            "Não é recomendado fazer limpeza completa todos os dias. Use semanalmente ou quando houver pouco espaço, cache corrompido ou lentidão anormal.",
+            color="#1f2937",
+            text_color="#e5e7eb",
+        )
+
+        self.add_info_panel(
+            self.content,
+            "Limpar Prefetch com frequência não aumenta FPS de forma consistente e pode até atrasar a abertura inicial de programas até o Windows recriar o cache. Use apenas ocasionalmente.",
+            color="#3f2f0b",
+            text_color="#fef3c7",
+        )
+
+        actions = ctk.CTkFrame(self.content, fg_color="transparent")
+        actions.pack(fill="x", padx=28, pady=(0, 12))
+
+        self.cleaning_analyze_button = ctk.CTkButton(
+            actions,
+            text="Analisar limpeza",
+            width=160,
+            command=lambda: self.start_cleaning_scan(body),
+        )
+        self.cleaning_analyze_button.pack(side="left", padx=(0, 10))
+
+        disk_cleanup_status = ctk.CTkLabel(
+            self.content,
+            text="Nenhuma ferramenta externa aberta nesta sessão.",
+            text_color="#9ca3af",
+            wraplength=760,
+            justify="left",
+        )
+
+        ctk.CTkButton(
+            actions,
+            text="Abrir Limpeza de Disco do Windows",
+            width=250,
+            command=lambda: self.open_windows_disk_cleanup(disk_cleanup_status),
+        ).pack(side="left")
+
+        disk_cleanup_status.pack(anchor="w", padx=28, pady=(0, 12))
+
+        body.pack(fill="both", expand=True, padx=0, pady=(0, 16))
+        self.render_cleaning_categories(
+            body,
+            [
+                {
+                    "nome": "TEMP do usuário",
+                    "status": "Aguardando análise",
+                    "tamanho_mb": 0,
+                    "caminho": "Clique em Analisar limpeza.",
+                },
+                {
+                    "nome": "TEMP do Windows",
+                    "status": "Aguardando análise",
+                    "tamanho_mb": 0,
+                    "caminho": "Clique em Analisar limpeza.",
+                },
+                {
+                    "nome": "Cache de miniaturas",
+                    "status": "Aguardando análise",
+                    "tamanho_mb": 0,
+                    "caminho": "Clique em Analisar limpeza.",
+                },
+                {
+                    "nome": "Prefetch",
+                    "status": "Aguardando análise",
+                    "tamanho_mb": 0,
+                    "caminho": "Clique em Analisar limpeza.",
+                },
+            ],
         )
 
     def show_restore(self):
