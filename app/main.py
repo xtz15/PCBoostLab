@@ -556,9 +556,45 @@ class PCBoostLabApp(ctk.CTk):
             font=ctk.CTkFont(size=14),
         ).pack(anchor="w", padx=16, pady=12)
 
+    def summarize_cleaning_categories(self, categories):
+        pending = [category for category in categories if category.get("status") == "Aguardando análise"]
+        if pending and len(pending) == len(categories):
+            return None
+
+        available = [category for category in categories if category.get("status") == "Disponível"]
+        unavailable = [
+            category
+            for category in categories
+            if category.get("status") not in {"Disponível", "Aguardando análise"}
+        ]
+
+        total_estimated_mb = round(sum(category.get("tamanho_mb", 0) for category in available), 1)
+
+        return {
+            "total_estimado_mb": total_estimated_mb,
+            "categorias_disponiveis": len(available),
+            "categorias_indisponiveis": len(unavailable),
+        }
+
     def render_cleaning_categories(self, parent, categories):
         for widget in parent.winfo_children():
             widget.destroy()
+
+        summary = self.summarize_cleaning_categories(categories)
+        if summary is not None:
+            summary_text = (
+                f"Total estimado encontrado: {self.format_size_mb(summary['total_estimado_mb'])}\n"
+                f"Categorias disponíveis: {summary['categorias_disponiveis']}\n"
+                f"Categorias sem acesso ou indisponíveis: {summary['categorias_indisponiveis']}\n"
+                "Esta etapa apenas analisa os arquivos. Nenhum arquivo foi excluído."
+            )
+
+            self.add_info_panel(
+                parent,
+                summary_text,
+                color="#1f2937",
+                text_color="#e5e7eb",
+            )
 
         if not categories:
             self.add_info_panel(
