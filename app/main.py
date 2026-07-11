@@ -557,6 +557,9 @@ class PCBoostLabApp(ctk.CTk):
         ).pack(anchor="w", padx=16, pady=12)
 
     def summarize_cleaning_categories(self, categories):
+        if not categories:
+            return None
+
         pending = [category for category in categories if category.get("status") == "Aguardando análise"]
         if pending and len(pending) == len(categories):
             return None

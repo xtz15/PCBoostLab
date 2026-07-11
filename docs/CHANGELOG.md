@@ -16,6 +16,10 @@ O formato segue uma adaptação simples do padrão Keep a Changelog.
 
 - Prévia da Limpeza Segura agora exibe resumo da análise com total estimado, contagem de categorias disponíveis e categorias sem acesso, sem executar exclusão de arquivos.
 
+### Corrigido
+
+- Corrigido o resumo da Limpeza Segura para não aparecer com valores zerados quando a lista de categorias estiver vazia.
+
 ---
 
 ## [0.1.0]
