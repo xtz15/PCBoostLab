@@ -81,6 +81,7 @@ def _build_category(nome: str, path: Path, pattern: str = "*", detalhes: dict | 
         "status": status,
         "tamanho_mb": bytes_to_mb(size_bytes),
         "quantidade_arquivos": file_count,
+        "padrao": pattern,
     }
 
     if detalhes:

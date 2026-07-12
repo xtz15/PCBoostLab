@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.core.logger import get_logger
+from app.cleaning.plan import build_cleaning_plan
 from app.cleaning.scan import scan_cleaning_preview
 from app.diagnostics.disks import collect_disks_info
 from app.diagnostics.processes import collect_top_processes
@@ -38,8 +39,13 @@ class PCBoostLabApp(ctk.CTk):
         self.dashboard_load_id = 0
         self.cleaning_load_id = 0
         self.cleaning_analyze_button = None
+        self.cleaning_review_button = None
+        self.cleaning_actions_frame = None
         self.cleaning_selected_categories = set()
         self.cleaning_last_categories = []
+        self.cleaning_plan_load_id = 0
+        self.cleaning_plan_result = None
+        self.cleaning_external_status_label = None
         self.latest_system_info = None
 
         self.grid_columnconfigure(1, weight=1)
@@ -86,8 +92,12 @@ class PCBoostLabApp(ctk.CTk):
         self.diagnostic_load_id += 1
         self.dashboard_load_id += 1
         self.cleaning_load_id += 1
+        self.cleaning_plan_load_id += 1
         self.diagnostic_refresh_button = None
         self.cleaning_analyze_button = None
+        self.cleaning_review_button = None
+        self.cleaning_actions_frame = None
+        self.cleaning_external_status_label = None
 
         for widget in self.content.winfo_children():
             widget.destroy()
@@ -615,6 +625,37 @@ class PCBoostLabApp(ctk.CTk):
 
         self.render_cleaning_categories(parent, self.cleaning_last_categories)
 
+    def ensure_cleaning_review_button(self, categories):
+        if self.cleaning_actions_frame is None:
+            return
+
+        if not self.has_category_analysis(categories):
+            if self.cleaning_review_button is not None:
+                self.cleaning_review_button.pack_forget()
+            return
+
+        if self.cleaning_review_button is None:
+            self.cleaning_review_button = ctk.CTkButton(
+                self.cleaning_actions_frame,
+                text="Revisar arquivos selecionados",
+                width=240,
+                command=lambda: self.start_cleaning_plan_review(self.cleaning_content_body),
+                state="disabled",
+            )
+            self.cleaning_review_button.pack(side="left", padx=(0, 10))
+        else:
+            self.cleaning_review_button.pack(side="left", padx=(0, 10))
+
+        has_selection = bool(self.cleaning_selected_categories)
+        self.cleaning_review_button.configure(state="normal" if has_selection else "disabled")
+
+    def update_cleaning_review_button_state(self):
+        if self.cleaning_review_button is None:
+            return
+
+        has_selection = bool(self.cleaning_selected_categories)
+        self.cleaning_review_button.configure(state="normal" if has_selection else "disabled")
+
     def render_cleaning_categories(self, parent, categories):
         self.cleaning_last_categories = categories or []
 
@@ -663,6 +704,9 @@ class PCBoostLabApp(ctk.CTk):
                 color="#1f2937",
                 text_color="#e5e7eb",
             )
+
+        self.ensure_cleaning_review_button(categories)
+        self.update_cleaning_review_button_state()
 
         for category in categories:
             card = ctk.CTkFrame(parent, corner_radius=8)
@@ -744,8 +788,10 @@ class PCBoostLabApp(ctk.CTk):
         if self.cleaning_analyze_button:
             self.cleaning_analyze_button.configure(state="disabled")
 
+        self.cleaning_plan_load_id += 1
         self.cleaning_selected_categories.clear()
         self.cleaning_last_categories = []
+        self.cleaning_plan_result = None
 
         self.show_loading_message(
             parent,
@@ -789,6 +835,148 @@ class PCBoostLabApp(ctk.CTk):
         if self.cleaning_analyze_button:
             self.cleaning_analyze_button.configure(state="normal")
 
+        self.update_cleaning_review_button_state()
+
+    def start_cleaning_plan_review(self, parent):
+        if not self.cleaning_selected_categories:
+            return
+
+        self.cleaning_plan_load_id += 1
+        load_id = self.cleaning_plan_load_id
+        categories_snapshot = [dict(category) for category in self.cleaning_last_categories]
+        selected_names_snapshot = set(self.cleaning_selected_categories)
+
+        if self.cleaning_review_button:
+            self.cleaning_review_button.configure(state="disabled")
+        if self.cleaning_analyze_button:
+            self.cleaning_analyze_button.configure(state="disabled")
+
+        self.show_loading_message(
+            parent,
+            "Gerando plano de limpeza em modo simulação...",
+            "Isso pode levar alguns segundos.",
+        )
+
+        def worker():
+            try:
+                plan = build_cleaning_plan(categories_snapshot, selected_names_snapshot)
+            except Exception as exc:
+                logger.exception("Falha ao gerar plano de limpeza em segundo plano: %s", exc)
+                self.after(0, lambda: self.finish_cleaning_plan_review(parent, load_id, error=exc))
+                return
+
+            self.after(0, lambda: self.finish_cleaning_plan_review(parent, load_id, plan=plan))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def finish_cleaning_plan_review(self, parent, load_id, plan=None, error=None):
+        if load_id != self.cleaning_plan_load_id:
+            return
+
+        try:
+            if not parent.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if error:
+            self.show_error_message(
+                parent,
+                "Não foi possível gerar o plano de limpeza agora. Tente novamente.",
+            )
+        else:
+            self.cleaning_plan_result = plan
+            self.show_cleaning_plan_review(parent, plan)
+
+        if self.cleaning_review_button is not None and self.cleaning_review_button.winfo_exists():
+            self.cleaning_review_button.configure(state="normal")
+        if self.cleaning_analyze_button is not None and self.cleaning_analyze_button.winfo_exists():
+            self.cleaning_analyze_button.configure(state="normal")
+
+    def show_cleaning_plan_review(self, parent, plan):
+        for widget in parent.winfo_children():
+            widget.destroy()
+
+        if self.cleaning_actions_frame is not None:
+            self.cleaning_actions_frame.pack_forget()
+
+        if self.cleaning_external_status_label is not None:
+            self.cleaning_external_status_label.pack_forget()
+
+        self.add_info_panel(
+            parent,
+            plan.get("mensagem", "Modo simulação: nenhum arquivo foi excluído."),
+            color="#1f2937",
+            text_color="#e5e7eb",
+        )
+
+        self.add_info_panel(
+            parent,
+            (
+                f"Categorias incluídas: {len(plan.get('categorias', []))}\n"
+                f"Arquivos no plano: {plan.get('quantidade_arquivos', 0)}\n"
+                f"Tamanho total estimado: {self.format_size_mb(plan.get('tamanho_total_mb', 0.0))}"
+            ),
+            color="#1f2937",
+            text_color="#e5e7eb",
+        )
+
+        if plan.get("arquivos_omitidos", 0) > 0:
+            self.add_info_panel(
+                parent,
+                f"Foram omitidos {plan['arquivos_omitidos']} arquivos adicionais da visualização.",
+                color="#3f2f0b",
+                text_color="#fef3c7",
+            )
+
+        for category in plan.get("categorias", []):
+            card = ctk.CTkFrame(parent, corner_radius=8)
+            card.pack(fill="x", padx=28, pady=(0, 10))
+
+            ctk.CTkLabel(
+                card,
+                text=category.get("nome", "Categoria"),
+                font=ctk.CTkFont(size=17, weight="bold"),
+            ).pack(anchor="w", padx=16, pady=(14, 4))
+
+            ctk.CTkLabel(
+                card,
+                text=f"Caminho: {category.get('caminho', '')}",
+                text_color="#9ca3af",
+                justify="left",
+                wraplength=760,
+            ).pack(anchor="w", padx=16, pady=(0, 6))
+
+            if not category.get("arquivos"):
+                ctk.CTkLabel(
+                    card,
+                    text="Nenhum arquivo encontrado dentro da pasta da categoria.",
+                    text_color="#9ca3af",
+                    justify="left",
+                    wraplength=760,
+                ).pack(anchor="w", padx=16, pady=(0, 10))
+                continue
+
+            for file_entry in category.get("arquivos", []):
+                ctk.CTkLabel(
+                    card,
+                    text=(
+                        f"- {file_entry.get('caminho', '')} "
+                        f"({self.format_size_mb(file_entry.get('tamanho_bytes', 0) / (1024 ** 2))})"
+                    ),
+                    text_color="#d1d5db",
+                    justify="left",
+                    wraplength=760,
+                ).pack(anchor="w", padx=20, pady=(0, 4))
+
+        close_button = ctk.CTkButton(
+            parent,
+            text="Fechar",
+            width=120,
+            command=lambda: self.show_cleaning(reset_selection=False, categories=self.cleaning_last_categories),
+        )
+        close_button.pack(anchor="e", padx=28, pady=(12, 18))
+
     def open_windows_disk_cleanup(self, result_label):
         try:
             subprocess.Popen(["cleanmgr.exe"])
@@ -801,11 +989,17 @@ class PCBoostLabApp(ctk.CTk):
                 text="Não foi possível abrir a Limpeza de Disco do Windows."
             )
 
-    def show_cleaning(self):
+    def show_cleaning(self, reset_selection=True, categories=None):
         self.clear_content()
-        self.cleaning_selected_categories.clear()
-        self.cleaning_last_categories = []
+        if reset_selection:
+            self.cleaning_selected_categories.clear()
+            self.cleaning_last_categories = []
         self.page_header("Limpeza", "Prévia segura de arquivos temporários")
+
+        if self.cleaning_actions_frame is not None:
+            self.cleaning_actions_frame.pack_forget()
+        if self.cleaning_external_status_label is not None:
+            self.cleaning_external_status_label.pack_forget()
 
         body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
 
@@ -834,6 +1028,9 @@ class PCBoostLabApp(ctk.CTk):
         )
         self.cleaning_analyze_button.pack(side="left", padx=(0, 10))
 
+        self.cleaning_actions_frame = actions
+        self.cleaning_content_body = body
+
         disk_cleanup_status = ctk.CTkLabel(
             self.content,
             text="Nenhuma ferramenta externa aberta nesta sessão.",
@@ -841,6 +1038,7 @@ class PCBoostLabApp(ctk.CTk):
             wraplength=760,
             justify="left",
         )
+        self.cleaning_external_status_label = disk_cleanup_status
 
         ctk.CTkButton(
             actions,
@@ -852,9 +1050,9 @@ class PCBoostLabApp(ctk.CTk):
         disk_cleanup_status.pack(anchor="w", padx=28, pady=(0, 12))
 
         body.pack(fill="both", expand=True, padx=0, pady=(0, 16))
-        self.render_cleaning_categories(
-            body,
-            [
+
+        if categories is None:
+            categories_to_render = self.cleaning_last_categories or [
                 {
                     "nome": "TEMP do usuário",
                     "status": "Aguardando análise",
@@ -879,8 +1077,11 @@ class PCBoostLabApp(ctk.CTk):
                     "tamanho_mb": 0,
                     "caminho": "Clique em Analisar limpeza.",
                 },
-            ],
-        )
+            ]
+        else:
+            categories_to_render = categories
+
+        self.render_cleaning_categories(body, categories_to_render)
 
     def show_restore(self):
         self.clear_content()
