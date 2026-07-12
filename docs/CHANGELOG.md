@@ -15,6 +15,7 @@ O formato segue uma adaptação simples do padrão Keep a Changelog.
 ### Alterado
 
 - Prévia da Limpeza Segura agora exibe resumo da análise com total estimado, contagem de categorias disponíveis e categorias sem acesso, sem executar exclusão de arquivos.
+- Prévia da Limpeza Segura agora mostra explicações específicas para cada categoria, incluindo o que é, benefício, risco, necessidade de administrador, possibilidade de desfazer e recomendação de uso.
 
 ### Corrigido
 

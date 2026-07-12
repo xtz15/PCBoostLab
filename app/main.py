@@ -630,7 +630,28 @@ class PCBoostLabApp(ctk.CTk):
                 text_color="#9ca3af",
                 justify="left",
                 wraplength=760,
-            ).pack(anchor="w", padx=16, pady=(0, 14))
+            ).pack(anchor="w", padx=16, pady=(0, 8))
+
+            explanation = (
+                f"O que é: {category.get('oque_e', 'Não disponível')}\n"
+                f"Benefício esperado: {category.get('beneficio', 'Não disponível')}\n"
+                f"Risco ou efeito temporário: {category.get('risco', 'Não disponível')}\n"
+                f"Necessidade de administrador: {category.get('administrador', 'Não disponível')}\n"
+                f"Possibilidade de desfazer: {category.get('desfazer', 'Não disponível')}\n"
+                f"Recomendação de uso: {category.get('recomendacao', 'Não disponível')}"
+            )
+
+            if any(
+                category.get(field) is not None
+                for field in ["oque_e", "beneficio", "risco", "administrador", "desfazer", "recomendacao"]
+            ):
+                ctk.CTkLabel(
+                    card,
+                    text=explanation,
+                    text_color="#d1d5db",
+                    justify="left",
+                    wraplength=760,
+                ).pack(anchor="w", padx=16, pady=(0, 14))
 
     def start_cleaning_scan(self, parent):
         self.cleaning_load_id += 1
