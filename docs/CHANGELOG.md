@@ -26,6 +26,7 @@ O formato segue uma adaptação simples do padrão Keep a Changelog.
 ### Adicionado
 
 - Adicionados testes automatizados para a análise e resumo da Limpeza Segura usando unittest.
+- Adicionada seleção visual das categorias na prévia da Limpeza Segura, com resumo separado e sem executar qualquer exclusão de arquivos.
 
 ---
 

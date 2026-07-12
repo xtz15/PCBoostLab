@@ -119,5 +119,68 @@ class CleaningSummaryTests(unittest.TestCase):
         self.assertEqual(summary["total_estimado_mb"], 2.5)
 
 
+class CleaningSelectionSummaryTests(unittest.TestCase):
+    def setUp(self):
+        self.app = PCBoostLabApp.__new__(PCBoostLabApp)
+
+    def test_empty_selection_returns_zeroed_summary(self):
+        categories = [
+            {"nome": "A", "status": "Disponível", "tamanho_mb": 1.5, "quantidade_arquivos": 3},
+        ]
+
+        summary = self.app.summarize_selected_categories(categories, set())
+
+        self.assertEqual(summary["quantidade_categorias"], 0)
+        self.assertEqual(summary["quantidade_arquivos"], 0)
+        self.assertEqual(summary["tamanho_estimado_mb"], 0.0)
+
+    def test_single_selected_category_is_summed(self):
+        categories = [
+            {"nome": "A", "status": "Disponível", "tamanho_mb": 2.2, "quantidade_arquivos": 4},
+        ]
+
+        summary = self.app.summarize_selected_categories(categories, {"A"})
+
+        self.assertEqual(summary["quantidade_categorias"], 1)
+        self.assertEqual(summary["quantidade_arquivos"], 4)
+        self.assertEqual(summary["tamanho_estimado_mb"], 2.2)
+
+    def test_two_selected_categories_are_summed(self):
+        categories = [
+            {"nome": "A", "status": "Disponível", "tamanho_mb": 1.5, "quantidade_arquivos": 2},
+            {"nome": "B", "status": "Disponível", "tamanho_mb": 2.5, "quantidade_arquivos": 3},
+        ]
+
+        summary = self.app.summarize_selected_categories(categories, {"A", "B"})
+
+        self.assertEqual(summary["quantidade_categorias"], 2)
+        self.assertEqual(summary["quantidade_arquivos"], 5)
+        self.assertEqual(summary["tamanho_estimado_mb"], 4.0)
+
+    def test_non_selected_categories_are_ignored(self):
+        categories = [
+            {"nome": "A", "status": "Disponível", "tamanho_mb": 1.0, "quantidade_arquivos": 1},
+            {"nome": "B", "status": "Disponível", "tamanho_mb": 2.0, "quantidade_arquivos": 2},
+        ]
+
+        summary = self.app.summarize_selected_categories(categories, {"B"})
+
+        self.assertEqual(summary["quantidade_categorias"], 1)
+        self.assertEqual(summary["quantidade_arquivos"], 2)
+        self.assertEqual(summary["tamanho_estimado_mb"], 2.0)
+
+    def test_unavailable_categories_are_ignored_even_if_selected_in_test_data(self):
+        categories = [
+            {"nome": "A", "status": "Sem acesso", "tamanho_mb": 10.0, "quantidade_arquivos": 99},
+            {"nome": "B", "status": "Disponível", "tamanho_mb": 3.0, "quantidade_arquivos": 4},
+        ]
+
+        summary = self.app.summarize_selected_categories(categories, {"A", "B"})
+
+        self.assertEqual(summary["quantidade_categorias"], 1)
+        self.assertEqual(summary["quantidade_arquivos"], 4)
+        self.assertEqual(summary["tamanho_estimado_mb"], 3.0)
+
+
 if __name__ == "__main__":
     unittest.main()

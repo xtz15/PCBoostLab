@@ -2,6 +2,7 @@
 import sys
 import subprocess
 import threading
+import tkinter as tk
 from pathlib import Path
 
 import customtkinter as ctk
@@ -37,6 +38,8 @@ class PCBoostLabApp(ctk.CTk):
         self.dashboard_load_id = 0
         self.cleaning_load_id = 0
         self.cleaning_analyze_button = None
+        self.cleaning_selected_categories = set()
+        self.cleaning_last_categories = []
         self.latest_system_info = None
 
         self.grid_columnconfigure(1, weight=1)
@@ -579,10 +582,42 @@ class PCBoostLabApp(ctk.CTk):
             "categorias_indisponiveis": len(unavailable),
         }
 
+    def summarize_selected_categories(self, categories, selected_names):
+        selected_categories = [
+            category
+            for category in categories
+            if category.get("nome") in selected_names and category.get("status") == "Disponível"
+        ]
+
+        total_files = sum(int(category.get("quantidade_arquivos", 0) or 0) for category in selected_categories)
+        total_size_mb = round(sum(float(category.get("tamanho_mb", 0) or 0) for category in selected_categories), 1)
+
+        return {
+            "quantidade_categorias": len(selected_categories),
+            "quantidade_arquivos": total_files,
+            "tamanho_estimado_mb": total_size_mb,
+        }
+
     def should_show_file_count(self, category):
         return category.get("status") == "Disponível"
 
+    def is_cleaning_category_selectable(self, category):
+        return category.get("status") == "Disponível"
+
+    def has_category_analysis(self, categories):
+        return any(category.get("status") != "Aguardando análise" for category in categories)
+
+    def update_cleaning_selection(self, category_name, selected, parent):
+        if selected:
+            self.cleaning_selected_categories.add(category_name)
+        else:
+            self.cleaning_selected_categories.discard(category_name)
+
+        self.render_cleaning_categories(parent, self.cleaning_last_categories)
+
     def render_cleaning_categories(self, parent, categories):
+        self.cleaning_last_categories = categories or []
+
         for widget in parent.winfo_children():
             widget.destroy()
 
@@ -611,9 +646,48 @@ class PCBoostLabApp(ctk.CTk):
             )
             return
 
+        if self.has_category_analysis(categories):
+            selection_summary = self.summarize_selected_categories(categories, self.cleaning_selected_categories)
+            if selection_summary["quantidade_categorias"] == 0:
+                selection_text = "Nenhuma categoria selecionada."
+            else:
+                selection_text = (
+                    f"Categorias selecionadas: {selection_summary['quantidade_categorias']}\n"
+                    f"Arquivos nas categorias selecionadas: {selection_summary['quantidade_arquivos']}\n"
+                    f"Tamanho estimado total: {self.format_size_mb(selection_summary['tamanho_estimado_mb'])}"
+                )
+
+            self.add_info_panel(
+                parent,
+                selection_text,
+                color="#1f2937",
+                text_color="#e5e7eb",
+            )
+
         for category in categories:
             card = ctk.CTkFrame(parent, corner_radius=8)
             card.pack(fill="x", padx=28, pady=(0, 10))
+
+            if self.is_cleaning_category_selectable(category):
+                check_var = tk.BooleanVar(value=category.get("nome") in self.cleaning_selected_categories)
+                ctk.CTkCheckBox(
+                    card,
+                    text="Selecionar categoria",
+                    variable=check_var,
+                    command=lambda name=category["nome"], selected=check_var, parent=parent: self.update_cleaning_selection(
+                        name,
+                        selected.get(),
+                        parent,
+                    ),
+                ).pack(anchor="e", padx=16, pady=(10, 0))
+            else:
+                card.configure(fg_color="#111827")
+                ctk.CTkLabel(
+                    card,
+                    text="Seleção indisponível para esta categoria.",
+                    text_color="#6b7280",
+                    font=ctk.CTkFont(size=12),
+                ).pack(anchor="e", padx=16, pady=(10, 0))
 
             ctk.CTkLabel(
                 card,
@@ -669,6 +743,9 @@ class PCBoostLabApp(ctk.CTk):
 
         if self.cleaning_analyze_button:
             self.cleaning_analyze_button.configure(state="disabled")
+
+        self.cleaning_selected_categories.clear()
+        self.cleaning_last_categories = []
 
         self.show_loading_message(
             parent,
@@ -726,6 +803,8 @@ class PCBoostLabApp(ctk.CTk):
 
     def show_cleaning(self):
         self.clear_content()
+        self.cleaning_selected_categories.clear()
+        self.cleaning_last_categories = []
         self.page_header("Limpeza", "Prévia segura de arquivos temporários")
 
         body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
