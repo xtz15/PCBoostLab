@@ -21,6 +21,10 @@ O formato segue uma adaptação simples do padrão Keep a Changelog.
 
 - Corrigido o resumo da Limpeza Segura para não aparecer com valores zerados quando a lista de categorias estiver vazia.
 
+### Adicionado
+
+- Adicionados testes automatizados para a análise e resumo da Limpeza Segura usando unittest.
+
 ---
 
 ## [0.1.0]
