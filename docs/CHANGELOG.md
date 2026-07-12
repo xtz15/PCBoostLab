@@ -21,6 +21,7 @@ O formato segue uma adaptação simples do padrão Keep a Changelog.
 ### Corrigido
 
 - Corrigido o resumo da Limpeza Segura para não aparecer com valores zerados quando a lista de categorias estiver vazia.
+- Categorias indisponíveis agora não exibem mais a contagem de arquivos com valor zero de forma enganosa.
 
 ### Adicionado
 

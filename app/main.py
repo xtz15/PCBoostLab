@@ -579,6 +579,9 @@ class PCBoostLabApp(ctk.CTk):
             "categorias_indisponiveis": len(unavailable),
         }
 
+    def should_show_file_count(self, category):
+        return category.get("status") == "Disponível"
+
     def render_cleaning_categories(self, parent, categories):
         for widget in parent.winfo_children():
             widget.destroy()
@@ -624,7 +627,7 @@ class PCBoostLabApp(ctk.CTk):
                 f"Caminho analisado: {category['caminho']}",
             ]
 
-            if category.get("quantidade_arquivos") is not None:
+            if self.should_show_file_count(category):
                 details_lines.append(
                     f"Arquivos encontrados: {category['quantidade_arquivos']}"
                 )

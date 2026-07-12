@@ -64,6 +64,12 @@ class CleaningSummaryTests(unittest.TestCase):
     def setUp(self):
         self.app = PCBoostLabApp.__new__(PCBoostLabApp)
 
+    def test_should_show_file_count_only_for_available_categories(self):
+        self.assertTrue(self.app.should_show_file_count({"status": "Disponível", "quantidade_arquivos": 3}))
+        self.assertFalse(self.app.should_show_file_count({"status": "Sem acesso", "quantidade_arquivos": 0}))
+        self.assertFalse(self.app.should_show_file_count({"status": "Não encontrado", "quantidade_arquivos": 0}))
+        self.assertFalse(self.app.should_show_file_count({"status": "Aguardando análise", "quantidade_arquivos": 0}))
+
     def test_empty_list_returns_none(self):
         self.assertIsNone(self.app.summarize_cleaning_categories([]))
 
