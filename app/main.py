@@ -3,6 +3,7 @@ import sys
 import subprocess
 import threading
 import tkinter as tk
+from copy import deepcopy
 from pathlib import Path
 
 import customtkinter as ctk
@@ -18,6 +19,7 @@ from app.cleaning.simulation import simulate_cleaning_candidates
 from app.diagnostics.disks import collect_disks_info
 from app.diagnostics.processes import collect_top_processes
 from app.diagnostics.system_info import collect_system_info, format_diagnostic_text
+from app.reports.cleaning_report import write_cleaning_simulation_report
 from app.reports.report_builder import generate_diagnostic_report
 
 
@@ -48,6 +50,8 @@ class PCBoostLabApp(ctk.CTk):
         self.cleaning_plan_result = None
         self.cleaning_simulation_load_id = 0
         self.cleaning_simulation_button = None
+        self.cleaning_report_load_id = 0
+        self.cleaning_report_button = None
         self.cleaning_external_status_label = None
         self.latest_system_info = None
 
@@ -97,10 +101,12 @@ class PCBoostLabApp(ctk.CTk):
         self.cleaning_load_id += 1
         self.cleaning_plan_load_id += 1
         self.cleaning_simulation_load_id += 1
+        self.cleaning_report_load_id += 1
         self.diagnostic_refresh_button = None
         self.cleaning_analyze_button = None
         self.cleaning_review_button = None
         self.cleaning_simulation_button = None
+        self.cleaning_report_button = None
         self.cleaning_actions_frame = None
         self.cleaning_external_status_label = None
 
@@ -968,11 +974,84 @@ class PCBoostLabApp(ctk.CTk):
             f"{detail.get('caminho', '')}"
         )
 
+    def start_cleaning_report_save(self, parent, report, selected_names, button, status_label):
+        self.cleaning_report_load_id += 1
+        load_id = self.cleaning_report_load_id
+        report_snapshot = deepcopy(report)
+        selected_names_snapshot = set(selected_names or set())
+
+        button.configure(state="disabled")
+        status_label.configure(text="Salvando relatório da simulação...")
+
+        def worker():
+            try:
+                report_path = write_cleaning_simulation_report(
+                    report_snapshot,
+                    selected_names_snapshot,
+                )
+            except Exception as exc:
+                logger.exception("Falha ao salvar relatorio da simulacao de limpeza: %s", exc)
+                self.after(
+                    0,
+                    lambda: self.finish_cleaning_report_save(
+                        parent,
+                        load_id,
+                        button,
+                        status_label,
+                        error=exc,
+                    ),
+                )
+                return
+
+            self.after(
+                0,
+                lambda: self.finish_cleaning_report_save(
+                    parent,
+                    load_id,
+                    button,
+                    status_label,
+                    report_path=report_path,
+                ),
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def finish_cleaning_report_save(
+        self,
+        parent,
+        load_id,
+        button,
+        status_label,
+        report_path=None,
+        error=None,
+    ):
+        if load_id != self.cleaning_report_load_id:
+            return
+
+        try:
+            if not parent.winfo_exists() or not button.winfo_exists() or not status_label.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if error:
+            status_label.configure(
+                text="Não foi possível salvar o relatório agora. Nenhum arquivo foi excluído."
+            )
+            button.configure(state="normal")
+            return
+
+        status_label.configure(text=f"Relatório salvo com sucesso:\n{report_path}")
+        button.configure(state="normal")
+
     def show_cleaning_simulation_result(self, parent, report):
         for widget in parent.winfo_children():
             widget.destroy()
 
         self.cleaning_simulation_button = None
+        self.cleaning_report_button = None
+        selected_names_snapshot = set(self.cleaning_selected_categories)
+        report_snapshot = deepcopy(report)
 
         self.add_info_panel(
             parent,
@@ -1028,6 +1107,28 @@ class PCBoostLabApp(ctk.CTk):
         actions = ctk.CTkFrame(parent, fg_color="transparent")
         actions.pack(fill="x", padx=28, pady=(0, 18))
 
+        report_status_label = ctk.CTkLabel(
+            parent,
+            text="Relatório da simulação ainda não salvo nesta sessão.",
+            text_color="#9ca3af",
+            wraplength=760,
+            justify="left",
+        )
+
+        self.cleaning_report_button = ctk.CTkButton(
+            actions,
+            text="Salvar relatório da simulação",
+            width=240,
+            command=lambda: self.start_cleaning_report_save(
+                parent,
+                report_snapshot,
+                selected_names_snapshot,
+                self.cleaning_report_button,
+                report_status_label,
+            ),
+        )
+        self.cleaning_report_button.pack(side="left", padx=(0, 10))
+
         ctk.CTkButton(
             actions,
             text="Voltar para revisão",
@@ -1041,6 +1142,8 @@ class PCBoostLabApp(ctk.CTk):
             width=120,
             command=lambda: self.show_cleaning(reset_selection=False, categories=self.cleaning_last_categories),
         ).pack(side="left")
+
+        report_status_label.pack(anchor="w", padx=28, pady=(0, 18))
 
     def show_cleaning_plan_review(self, parent, plan):
         for widget in parent.winfo_children():

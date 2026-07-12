@@ -25,6 +25,10 @@ O formato segue uma adaptação simples do padrão Keep a Changelog.
 
 ### Adicionado
 
+- Relatório TXT da simulação de Limpeza Segura.
+- Relatório de simulação informa expressamente que nenhum arquivo foi excluído.
+- Exclusão real continua indisponível na interface da Limpeza Segura.
+
 - Integração do motor à interface apenas em modo simulação.
 - Resultado de simulação informa que nenhum arquivo é excluído e a exclusão real permanece indisponível.
 - Relatório do motor agora inclui `bytes_simulados` para totalizar arquivos validados em dry-run.
