@@ -155,6 +155,7 @@ def _build_empty_report(dry_run: bool = True) -> dict:
         "validos": 0,
         "excluidos": 0,
         "bytes_excluidos": 0,
+        "bytes_simulados": 0,
         "simulados": 0,
         "ausentes": 0,
         "ignorados_fora_da_raiz": 0,
@@ -227,10 +228,11 @@ def execute_cleaning_candidates(candidates, dry_run=True, confirmation_token=Non
     """
 
     report = _build_empty_report(dry_run=dry_run)
-    report["solicitados"] = len(candidates or [])
 
     seen_paths = set()
     for candidate in candidates or []:
+        report["solicitados"] += 1
+
         if not isinstance(candidate, Mapping):
             report["falhas"] += 1
             report["detalhes"].append(
@@ -351,6 +353,7 @@ def execute_cleaning_candidates(candidates, dry_run=True, confirmation_token=Non
 
             report["validos"] += 1
             report["simulados"] += 1
+            report["bytes_simulados"] += size_bytes
             report["detalhes"].append(
                 _detail(
                     category,

@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from app.core.logger import get_logger
 from app.cleaning.plan import build_cleaning_plan
 from app.cleaning.scan import scan_cleaning_preview
+from app.cleaning.simulation import simulate_cleaning_candidates
 from app.diagnostics.disks import collect_disks_info
 from app.diagnostics.processes import collect_top_processes
 from app.diagnostics.system_info import collect_system_info, format_diagnostic_text
@@ -45,6 +46,8 @@ class PCBoostLabApp(ctk.CTk):
         self.cleaning_last_categories = []
         self.cleaning_plan_load_id = 0
         self.cleaning_plan_result = None
+        self.cleaning_simulation_load_id = 0
+        self.cleaning_simulation_button = None
         self.cleaning_external_status_label = None
         self.latest_system_info = None
 
@@ -93,9 +96,11 @@ class PCBoostLabApp(ctk.CTk):
         self.dashboard_load_id += 1
         self.cleaning_load_id += 1
         self.cleaning_plan_load_id += 1
+        self.cleaning_simulation_load_id += 1
         self.diagnostic_refresh_button = None
         self.cleaning_analyze_button = None
         self.cleaning_review_button = None
+        self.cleaning_simulation_button = None
         self.cleaning_actions_frame = None
         self.cleaning_external_status_label = None
 
@@ -893,6 +898,150 @@ class PCBoostLabApp(ctk.CTk):
         if self.cleaning_analyze_button is not None and self.cleaning_analyze_button.winfo_exists():
             self.cleaning_analyze_button.configure(state="normal")
 
+    def start_cleaning_simulation(self, parent):
+        if not self.cleaning_selected_categories:
+            return
+
+        self.cleaning_simulation_load_id += 1
+        load_id = self.cleaning_simulation_load_id
+        categories_snapshot = [dict(category) for category in self.cleaning_last_categories]
+        selected_names_snapshot = set(self.cleaning_selected_categories)
+
+        if self.cleaning_simulation_button is not None:
+            self.cleaning_simulation_button.configure(state="disabled")
+        if self.cleaning_review_button is not None and self.cleaning_review_button.winfo_exists():
+            self.cleaning_review_button.configure(state="disabled")
+        if self.cleaning_analyze_button is not None and self.cleaning_analyze_button.winfo_exists():
+            self.cleaning_analyze_button.configure(state="disabled")
+
+        self.show_loading_message(
+            parent,
+            "Simulando limpeza segura...",
+            "Validando os arquivos selecionados sem excluir nada.",
+        )
+
+        def worker():
+            try:
+                report = simulate_cleaning_candidates(categories_snapshot, selected_names_snapshot)
+            except Exception as exc:
+                logger.exception("Falha ao simular limpeza segura em segundo plano: %s", exc)
+                self.after(0, lambda: self.finish_cleaning_simulation(parent, load_id, error=exc))
+                return
+
+            self.after(0, lambda: self.finish_cleaning_simulation(parent, load_id, report=report))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def finish_cleaning_simulation(self, parent, load_id, report=None, error=None):
+        if load_id != self.cleaning_simulation_load_id:
+            return
+
+        try:
+            if not parent.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if error:
+            self.show_error_message(
+                parent,
+                "Não foi possível simular a limpeza agora. Nenhum arquivo foi excluído.",
+            )
+            self.restore_cleaning_simulation_controls()
+            return
+
+        self.show_cleaning_simulation_result(parent, report)
+
+    def restore_cleaning_simulation_controls(self):
+        if self.cleaning_simulation_button is not None and self.cleaning_simulation_button.winfo_exists():
+            self.cleaning_simulation_button.configure(state="normal")
+        if self.cleaning_review_button is not None and self.cleaning_review_button.winfo_exists():
+            self.cleaning_review_button.configure(state="normal")
+        if self.cleaning_analyze_button is not None and self.cleaning_analyze_button.winfo_exists():
+            self.cleaning_analyze_button.configure(state="normal")
+
+    def format_simulation_detail(self, detail):
+        return (
+            f"{detail.get('resultado', 'resultado')} | "
+            f"{detail.get('motivo', 'sem_motivo')} | "
+            f"{detail.get('categoria', 'Sem categoria')} | "
+            f"{detail.get('caminho', '')}"
+        )
+
+    def show_cleaning_simulation_result(self, parent, report):
+        for widget in parent.winfo_children():
+            widget.destroy()
+
+        self.cleaning_simulation_button = None
+
+        self.add_info_panel(
+            parent,
+            (
+                "Simulação concluída: nenhum arquivo foi excluído.\n"
+                "A simulação apenas validou os candidatos selecionados pelo motor seguro."
+            ),
+            color="#14532d",
+            text_color="#dcfce7",
+        )
+
+        summary = (
+            f"Arquivos solicitados: {report.get('solicitados', 0)}\n"
+            f"Candidatos válidos: {report.get('validos', 0)}\n"
+            f"Arquivos simulados: {report.get('simulados', 0)}\n"
+            f"Arquivos ausentes: {report.get('ausentes', 0)}\n"
+            f"Arquivos fora da raiz: {report.get('ignorados_fora_da_raiz', 0)}\n"
+            f"Caminhos relativos ignorados: {report.get('ignorados_caminho_relativo', 0)}\n"
+            f"Itens que não são arquivos: {report.get('ignorados_nao_arquivo', 0)}\n"
+            f"Links ou junctions ignorados: {report.get('ignorados_link', 0)}\n"
+            f"Duplicados: {report.get('duplicados', 0)}\n"
+            f"Falhas: {report.get('falhas', 0)}\n"
+            f"Tamanho total simulado: {self.format_size_mb(report.get('bytes_simulados', 0) / (1024 ** 2))}"
+        )
+        self.add_info_panel(parent, summary, color="#1f2937", text_color="#e5e7eb")
+
+        all_details = list(report.get("detalhes", []))
+        details = all_details[:100]
+        omitted = max(len(all_details) - len(details), 0)
+
+        self.section_title(parent, "Primeiros resultados")
+        if not details:
+            self.add_info_panel(
+                parent,
+                "Nenhum detalhe foi gerado pela simulação.",
+                color="#1f2937",
+                text_color="#e5e7eb",
+            )
+        else:
+            self.add_readonly_box(
+                parent,
+                "\n".join(self.format_simulation_detail(detail) for detail in details),
+                height=260,
+            )
+
+        self.add_info_panel(
+            parent,
+            f"Detalhes omitidos da visualização: {omitted}",
+            color="#1f2937",
+            text_color="#e5e7eb",
+        )
+
+        actions = ctk.CTkFrame(parent, fg_color="transparent")
+        actions.pack(fill="x", padx=28, pady=(0, 18))
+
+        ctk.CTkButton(
+            actions,
+            text="Voltar para revisão",
+            width=170,
+            command=lambda: self.show_cleaning_plan_review(parent, self.cleaning_plan_result),
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            actions,
+            text="Fechar",
+            width=120,
+            command=lambda: self.show_cleaning(reset_selection=False, categories=self.cleaning_last_categories),
+        ).pack(side="left")
+
     def show_cleaning_plan_review(self, parent, plan):
         for widget in parent.winfo_children():
             widget.destroy()
@@ -928,6 +1077,14 @@ class PCBoostLabApp(ctk.CTk):
                 color="#3f2f0b",
                 text_color="#fef3c7",
             )
+
+        self.cleaning_simulation_button = ctk.CTkButton(
+            parent,
+            text="Simular limpeza segura",
+            width=210,
+            command=lambda: self.start_cleaning_simulation(parent),
+        )
+        self.cleaning_simulation_button.pack(anchor="w", padx=28, pady=(0, 14))
 
         for category in plan.get("categorias", []):
             card = ctk.CTkFrame(parent, corner_radius=8)

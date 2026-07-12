@@ -25,6 +25,9 @@ O formato segue uma adaptação simples do padrão Keep a Changelog.
 
 ### Adicionado
 
+- Integração do motor à interface apenas em modo simulação.
+- Resultado de simulação informa que nenhum arquivo é excluído e a exclusão real permanece indisponível.
+- Relatório do motor agora inclui `bytes_simulados` para totalizar arquivos validados em dry-run.
 - Motor isolado de exclusão segura.
 - Motor de exclusão segura ainda não conectado à interface.
 - Dry-run padrão e confirmação explícita para execução real.
