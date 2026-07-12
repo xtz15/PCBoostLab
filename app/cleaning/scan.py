@@ -38,16 +38,24 @@ def _safe_file_size(path: Path) -> int:
     return 0
 
 
-def _safe_directory_size(path: Path, pattern: str = "*") -> int:
+def _safe_directory_scan(path: Path, pattern: str = "*") -> tuple[int, int]:
     if _path_status(path) != "Disponível":
-        return 0
+        return 0, 0
 
     total = 0
+    count = 0
 
     try:
         iterator = path.rglob(pattern)
         for item in iterator:
-            total += _safe_file_size(item)
+            try:
+                if item.is_file():
+                    count += 1
+                    total += _safe_file_size(item)
+            except PermissionError:
+                logger.info("Arquivo ignorado por permissao: %s", item)
+            except OSError as exc:
+                logger.info("Arquivo ignorado por erro de acesso: %s (%s)", item, exc)
     except PermissionError:
         logger.info("Pasta ignorada por permissao: %s", path)
     except OSError as exc:
@@ -55,18 +63,24 @@ def _safe_directory_size(path: Path, pattern: str = "*") -> int:
     except Exception as exc:
         logger.exception("Falha inesperada ao analisar pasta %s: %s", path, exc)
 
-    return total
+    return total, count
+
+
+def _safe_directory_size(path: Path, pattern: str = "*") -> int:
+    size_bytes, _ = _safe_directory_scan(path, pattern)
+    return size_bytes
 
 
 def _build_category(nome: str, path: Path, pattern: str = "*", detalhes: dict | None = None) -> dict:
     status = _path_status(path)
-    size_bytes = _safe_directory_size(path, pattern) if status == "Disponível" else 0
+    size_bytes, file_count = _safe_directory_scan(path, pattern) if status == "Disponível" else (0, 0)
 
     category = {
         "nome": nome,
         "caminho": str(path),
         "status": status,
         "tamanho_mb": bytes_to_mb(size_bytes),
+        "quantidade_arquivos": file_count,
     }
 
     if detalhes:

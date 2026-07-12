@@ -618,11 +618,18 @@ class PCBoostLabApp(ctk.CTk):
                 font=ctk.CTkFont(size=17, weight="bold"),
             ).pack(anchor="w", padx=16, pady=(14, 4))
 
-            details = (
-                f"Tamanho estimado: {self.format_size_mb(category['tamanho_mb'])}\n"
-                f"Status: {category['status']}\n"
-                f"Caminho analisado: {category['caminho']}"
-            )
+            details_lines = [
+                f"Tamanho estimado: {self.format_size_mb(category['tamanho_mb'])}",
+                f"Status: {category['status']}",
+                f"Caminho analisado: {category['caminho']}",
+            ]
+
+            if category.get("quantidade_arquivos") is not None:
+                details_lines.append(
+                    f"Arquivos encontrados: {category['quantidade_arquivos']}"
+                )
+
+            details = "\n".join(details_lines)
 
             ctk.CTkLabel(
                 card,

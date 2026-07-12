@@ -37,6 +37,28 @@ class CleaningScanTests(unittest.TestCase):
 
             self.assertEqual(category["oque_e"], "Detalhes da categoria")
 
+    def test_build_category_counts_files_in_subfolders(self):
+        with TemporaryDirectory() as temp_dir:
+            target_dir = Path(temp_dir) / "sample"
+            subfolder = target_dir / "sub"
+            subfolder.mkdir(parents=True)
+            (target_dir / "file1.txt").write_text("conteudo", encoding="utf-8")
+            (subfolder / "file2.txt").write_text("mais conteudo", encoding="utf-8")
+
+            category = cleaning_scan._build_category("Categoria teste", target_dir)
+
+            self.assertEqual(category["quantidade_arquivos"], 2)
+
+    def test_build_category_includes_file_count_key(self):
+        with TemporaryDirectory() as temp_dir:
+            target_dir = Path(temp_dir) / "sample"
+            target_dir.mkdir()
+            (target_dir / "file.txt").write_text("conteudo", encoding="utf-8")
+
+            category = cleaning_scan._build_category("Categoria teste", target_dir)
+
+            self.assertIn("quantidade_arquivos", category)
+
 
 class CleaningSummaryTests(unittest.TestCase):
     def setUp(self):
